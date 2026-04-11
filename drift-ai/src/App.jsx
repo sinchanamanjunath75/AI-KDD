@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
+const API_BASE = "http://localhost:5000/api";
+
 const C = {
   bg: "#050A14", bgCard: "#0A1628", bgCard2: "#0D1F3C",
   accent: "#00D4FF", accent2: "#7B2FFF", accent3: "#FF4D6D",
@@ -62,6 +64,9 @@ const css = `
   .contact-input::placeholder{color:${C.muted}}
   .ticker-wrap{overflow:hidden;white-space:nowrap;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};background:${C.bgCard};padding:9px 0}
   .ticker-inner{display:inline-flex;gap:48px;animation:tickerMove 28s linear infinite}
+  @keyframes skeletonPulse{0%{background-color:rgba(26,46,74,.3)}50%{background-color:rgba(26,46,74,.6)}100%{background-color:rgba(26,46,74,.3)}}
+  .skeleton{animation:skeletonPulse 1.5s ease-in-out infinite;border-radius:4px}
+  .toast{position:fixed;bottom:24px;right:24px;background:${C.bgCard};border:1px solid ${C.border};padding:12px 20px;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:3000;display:flex;align-items:center;gap:12px;animation:slideUp .3s ease forwards}
 `;
 
 // ── Shared visual primitives ──────────────────────────────────────────────────
@@ -165,6 +170,32 @@ function Waveform({color=C.accent,bars=36}) {
   );
 }
 
+function SkeletonCard({type='update'}) {
+  return (
+    <div className="card" style={{padding:20,display:'flex',flexDirection:'column',gap:12}}>
+      <div className="skeleton" style={{width:'30%',height:18}}/>
+      <div className="skeleton" style={{width:'80%',height:22}}/>
+      <div className="skeleton" style={{width:'100%',height:40}}/>
+      {type === 'update' && <div style={{display:'flex',gap:10}}><div className="skeleton" style={{width:60,height:24,borderRadius:20}}/><div className="skeleton" style={{width:80,height:24,borderRadius:20}}/></div>}
+    </div>
+  );
+}
+
+function Toast({message,type='info',onClose}) {
+  useEffect(()=>{
+    const t=setTimeout(onClose,4000);
+    return ()=>clearTimeout(t);
+  },[onClose]);
+  const icon = type==='success'?'✅':type==='error'?'❌':'ℹ️';
+  return (
+    <div className="toast">
+      <span style={{fontSize:18}}>{icon}</span>
+      <div style={{fontSize:14,fontWeight:500}}>{message}</div>
+      <button style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16,marginLeft:8}} onClick={onClose}>✕</button>
+    </div>
+  );
+}
+
 function DriftRing({score=73,label="Drift",color=C.accent3}) {
   const r=38,circ=2*Math.PI*r,offset=circ*(1-score/100);
   return (
@@ -184,14 +215,27 @@ function DriftRing({score=73,label="Drift",color=C.accent3}) {
 }
 
 function LiveFeed() {
-  const items=[
-    {id:1,model:'GPT-4o',event:'Semantic drift detected',severity:'HIGH',time:'now',score:82},
-    {id:2,model:'Claude 3.5',event:'Knowledge gap: Post-2024 events',severity:'MED',time:'2m',score:54},
-    {id:3,model:'LLaMA 3.1',event:'Confidence calibration off',severity:'LOW',time:'5m',score:31},
-    {id:4,model:'Gemini 1.5',event:'Hallucination spike',severity:'HIGH',time:'8m',score:91},
-    {id:5,model:'Mistral 7B',event:'Temporal anchor bias',severity:'MED',time:'12m',score:67},
-  ];
+  const [items,setItems]=useState([]);
+  
+  useEffect(() => {
+    fetch(`${API_BASE}/updates`)
+      .then(res => res.json())
+      .then(data => {
+        const mapped = data.slice(0, 5).map(u => ({
+          id: u.id,
+          model: u.category,
+          event: u.title,
+          severity: u.drift > 80 ? 'HIGH' : (u.drift > 50 ? 'MED' : 'LOW'),
+          time: 'now',
+          score: u.drift || 0
+        }));
+        setItems(mapped);
+      });
+  }, []);
+
   const sc=s=>s==='HIGH'?C.accent3:s==='MED'?C.amber:C.green;
+  if (items.length === 0) return <div style={{color:C.muted,fontSize:13,textAlign:'center',padding:20}}>No live events detected...</div>;
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:8}}>
       {items.map((it,i)=>(
@@ -206,7 +250,7 @@ function LiveFeed() {
           </div>
           <div style={{textAlign:'right',flexShrink:0}}>
             <div style={{fontSize:12,color:sc(it.severity),fontWeight:700}}>{it.severity}</div>
-            <div style={{fontSize:10,color:C.muted}}>{it.time} ago</div>
+            <div style={{fontSize:10,color:C.muted}}>{it.time}</div>
           </div>
           <DriftRing score={it.score} label="" color={sc(it.severity)}/>
         </div>
@@ -379,8 +423,8 @@ const SEED=[
   {id:6,title:'Mistral Releases Codestral-2025 with 256K Context',category:'Model Release',author:'Mistral AI',date:'2025-05-26',content:'Codestral-2025 targets enterprise developers with 256K context window, improved repository-level code understanding, and multi-file editing capabilities. Knowledge drift tested at 44%.',upvotes:53,tags:['Mistral','Code','Enterprise'],drift:44},
 ];
 
-function GenAIUpdates({user,setPage}) {
-  const [updates,setUpdates]=useState(SEED);
+function GenAIUpdates({user,setPage,notify}) {
+  const [updates,setUpdates]=useState([]);
   const [filter,setFilter]=useState('All');
   const [sort,setSort]=useState('newest');
   const [search,setSearch]=useState('');
@@ -389,6 +433,26 @@ function GenAIUpdates({user,setPage}) {
   const [form,setForm]=useState({title:'',category:'Model Release',content:'',tags:'',author:user?.name||''});
   const [formErr,setFormErr]=useState({});
   const [submitted,setSubmitted]=useState(false);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/updates`)
+      .then(res => res.json())
+      .then(data => {
+        setUpdates(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch updates:", err);
+        setLoading(false);
+      });
+
+    if (user?.email) {
+      fetch(`${API_BASE}/user/votes?email=${user.email}`)
+        .then(res => res.json())
+        .then(data => setVoted(new Set(data)));
+    }
+  }, [user]);
 
   const filtered=updates
     .filter(u=>filter==='All'||u.category===filter)
@@ -396,12 +460,33 @@ function GenAIUpdates({user,setPage}) {
     .sort((a,b)=>sort==='newest'?b.id-a.id:sort==='upvotes'?b.upvotes-a.upvotes:a.title.localeCompare(b.title));
 
   const toggleVote=id=>{
-    setVoted(prev=>{
-      const next=new Set(prev);
-      if(next.has(id)){next.delete(id);setUpdates(u=>u.map(x=>x.id===id?{...x,upvotes:x.upvotes-1}:x));}
-      else{next.add(id);setUpdates(u=>u.map(x=>x.id===id?{...x,upvotes:x.upvotes+1}:x));}
-      return next;
-    });
+    if (!user) return setPage('login');
+    const update = updates.find(u => u.id === id);
+    if (!update) return;
+
+    const isAdding = !voted.has(id);
+    const newUpvotes = isAdding ? update.upvotes + 1 : update.upvotes - 1;
+
+    fetch(`${API_BASE}/updates/${id}/vote`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        upvotes: newUpvotes, 
+        user_email: user.email,
+        remove: !isAdding 
+      })
+    })
+    .then(res => res.json())
+    .then(updatedItem => {
+      setUpdates(prev => prev.map(u => u.id === id ? updatedItem : u));
+      setVoted(prev => {
+        const next = new Set(prev);
+        if (isAdding) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+    })
+    .catch(err => console.error("Vote failed:", err));
   };
 
   const validateForm=()=>{
@@ -414,16 +499,33 @@ function GenAIUpdates({user,setPage}) {
 
   const submitUpdate=()=>{
     if(!validateForm()) return;
-    const nu={
-      id:Date.now(),title:form.title,category:form.category,
-      author:form.author,date:new Date().toISOString().slice(0,10),
-      content:form.content,upvotes:0,
-      tags:form.tags.split(',').map(t=>t.trim()).filter(Boolean),
-      drift:null,isNew:true
+    
+    const payload = {
+      title: form.title,
+      category: form.category,
+      author: form.author,
+      date: new Date().toISOString().slice(0, 10),
+      content: form.content,
+      tags: form.tags.split(',').map(t => t.trim()).filter(Boolean)
     };
-    setUpdates(u=>[nu,...u]);
-    setSubmitted(true);
-    setTimeout(()=>{setShowForm(false);setSubmitted(false);setForm({title:'',category:'Model Release',content:'',tags:'',author:user?.name||''});},2200);
+
+    fetch(`${API_BASE}/updates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(newUpdate => {
+      setUpdates(u => [newUpdate, ...u]);
+      setSubmitted(true);
+      notify('Update published successfully!', 'success');
+      setTimeout(() => {
+        setShowForm(false);
+        setSubmitted(false);
+        setForm({ title: '', category: 'Model Release', content: '', tags: '', author: user?.name || '' });
+      }, 2200);
+    })
+    .catch(err => console.error("Submit failed:", err));
   };
 
   const cc=cat=>CAT_COL[cat]||{bg:'rgba(122,139,160,.12)',br:C.border,tx:C.muted};
@@ -530,7 +632,9 @@ function GenAIUpdates({user,setPage}) {
 
         {/* Cards */}
         <div style={{display:'flex',flexDirection:'column',gap:14}}>
-          {filtered.length===0?(
+          {loading ? (
+            Array.from({length:3}).map((_,i)=><SkeletonCard key={i}/>)
+          ) : filtered.length===0?(
             <div style={{textAlign:'center',padding:'56px 20px',color:C.muted}}>
               <div style={{fontSize:40,marginBottom:10}}>🔭</div>
               <div style={{fontSize:15}}>No updates match your filters.</div>
@@ -560,6 +664,9 @@ function GenAIUpdates({user,setPage}) {
                           color:dc}}>
                           Drift {u.drift}%
                         </span>
+                      )}
+                      {u.diagnosis&&(
+                         <button className="btn-outline" style={{fontSize:10,padding:'2px 8px'}} onClick={()=>notify(`AI Diagnosis: ${u.diagnosis}`, 'info')}>🔍 Diagnose</button>
                       )}
                     </div>
                     <h3 style={{fontSize:15,fontWeight:600,lineHeight:1.4,marginBottom:7}}>{u.title}</h3>
@@ -815,15 +922,26 @@ function Contact({setPage}) {
 }
 
 // ── Login ──────────────────────────────────────────────────────────────────────
-function Login({setPage,onLogin}) {
+function Login({setPage,onLogin,notify}) {
   const [form,setForm]=useState({email:'',password:''});
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState('');
   const handle=async()=>{
     if(!form.email||!form.password){setError('Please fill in all fields.');return;}
     setLoading(true);setError('');
-    await new Promise(r=>setTimeout(r,1100));
-    onLogin({name:form.email.split('@')[0],email:form.email});
+    
+    try {
+      const res = await fetch(`${API_BASE}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      onLogin(data);
+    } catch (err) {
+      setError('Connection refused. Please start the backend server.');
+      setLoading(false);
+    }
   };
   return (
     <div className="page" style={{minHeight:'100vh',display:'flex',alignItems:'center',
@@ -878,7 +996,7 @@ function Login({setPage,onLogin}) {
 }
 
 // ── Signup ─────────────────────────────────────────────────────────────────────
-function Signup({setPage,onLogin}) {
+function Signup({setPage,onLogin,notify}) {
   const [step,setStep]=useState(1);
   const [form,setForm]=useState({name:'',email:'',password:'',confirm:'',plan:'pro',org:''});
   const [loading,setLoading]=useState(false);
@@ -897,7 +1015,21 @@ function Signup({setPage,onLogin}) {
     setErrors(e);return Object.keys(e).length===0;
   };
   const next=()=>{if(step===1&&!validate1()) return;setStep(s=>s+1);};
-  const submit=async()=>{setLoading(true);await new Promise(r=>setTimeout(r,1400));onLogin({name:form.name,email:form.email,plan:form.plan});};
+  const submit=async()=>{
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      onLogin(data);
+    } catch (err) {
+      alert('Registration failed. Is the backend running?');
+      setLoading(false);
+    }
+  };
   return (
     <div className="page" style={{minHeight:'100vh',display:'flex',alignItems:'center',
       justifyContent:'center',padding:'80px 24px 36px',position:'relative'}}>
@@ -989,21 +1121,116 @@ function Signup({setPage,onLogin}) {
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
-function Dashboard({user,setPage}) {
+function Dashboard({user,setPage,notify}) {
   const [activeTab,setActiveTab]=useState('overview');
   const [time,setTime]=useState(new Date());
-  useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return()=>clearInterval(t);},[]);
+  const [updates,setUpdates]=useState([]);
+  const [driftModels,setDriftModels]=useState([]);
+  const [analytics,setAnalytics]=useState(null);
+  const [showAddModal,setShowAddModal]=useState(false);
+  const [newModel,setNewModel]=useState({name:'',version:'',tokens:'',drift:0});
+  
+  const fetchData = () => {
+    fetch(`${API_BASE}/updates`)
+      .then(res => res.json())
+      .then(data => setUpdates(data));
+    fetch(`${API_BASE}/models`)
+      .then(res => res.json())
+      .then(data => setDriftModels(data));
+    fetch(`${API_BASE}/analytics/summary`)
+      .then(res => res.json())
+      .then(data => setAnalytics(data));
+  };
+
+  useEffect(()=>{
+    const t=setInterval(()=>setTime(new Date()),1000);
+    fetchData();
+    return()=>clearInterval(t);
+  },[]);
+
+  const handleExport = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(updates, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href",     dataStr);
+    downloadAnchorNode.setAttribute("download", "drift_updates.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+    notify('Community data exported', 'success');
+  };
+
+  const handleGenerateReport = () => {
+    const reportWindow = window.open('', '_blank');
+    const content = `
+      <html>
+        <head>
+          <title>DRIFT.AI Intelligence Report</title>
+          <style>
+            body{font-family:sans-serif;padding:40px;color:#333;line-height:1.6}
+            h1{color:#00D4FF;border-bottom:2px solid #EEE;padding-bottom:10px}
+            .metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin:30px 0}
+            .metric{padding:20px;background:#F9F9F9;border-radius:10px;text-align:center}
+            .val{font-size:24px;font-weight:bold;color:#000}
+            table{width:100%;border-collapse:collapse;margin-top:30px}
+            th,td{text-align:left;padding:12px;border-bottom:1px solid #EEE}
+            th{background:#F0F0F0}
+            .critical{color:red;font-weight:bold}
+          </style>
+        </head>
+        <body>
+          <h1>DRIFT.AI Intelligence Analysis Summary</h1>
+          <p>Generated on: ${new Date().toLocaleString()}</p>
+          <div class="metric-grid">
+            <div class="metric"><div class="val">${avgDrift}%</div>Avg Network Drift</div>
+            <div class="metric"><div class="val">${criticalCount}</div>Critical Alerts</div>
+            <div class="metric"><div class="val">${analytics?.health_score || 0}%</div>Network Health Index</div>
+          </div>
+          <h2>Critical Drift Events</h2>
+          <table>
+            <thead><tr><th>Model/Topic</th><th>Drift Score</th><th>Author</th><th>Date</th></tr></thead>
+            <tbody>
+              ${updates.filter(u=>u.drift>80).map(u=>`
+                <tr><td>${u.title}</td><td class="critical">${u.drift}%</td><td>${u.author}</td><td>${u.date}</td></tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <p style="margin-top:50px;font-size:12px;color:#999">Confidence Interval: 94.2% · Neural Engine v4.2.1</p>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `;
+    reportWindow.document.write(content);
+    reportWindow.document.close();
+  };
+
+  const handleAddModel = () => {
+    if(!newModel.name) return;
+    fetch(`${API_BASE}/models`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({...newModel, health: newModel.drift > 80 ? 'critical' : newModel.drift > 50 ? 'warning' : 'good'})
+    })
+    .then(res => res.json())
+    .then(() => {
+      fetchData();
+      setShowAddModal(false);
+      setNewModel({name:'',version:'',tokens:'',drift:0});
+      notify('New AI model registered', 'success');
+    })
+    .catch(() => notify('Failed to register model', 'error'));
+  };
+
   const tabs=['overview','models','alerts','analytics'];
-  const driftModels=[
-    {name:'GPT-4o',drift:82,health:'critical',version:'2024-05',tokens:'1.8T'},
-    {name:'Claude 3.5 Sonnet',drift:54,health:'warning',version:'2024-04',tokens:'2.1T'},
-    {name:'Gemini 1.5 Pro',drift:91,health:'critical',version:'2024-03',tokens:'3.2T'},
-    {name:'LLaMA 3.1 70B',drift:31,health:'good',version:'2024-07',tokens:'950B'},
-    {name:'Mistral 7B Instruct',drift:67,health:'warning',version:'2024-06',tokens:'420B'},
-    {name:'Falcon 180B',drift:23,health:'good',version:'2023-09',tokens:'1.2T'},
-  ];
+  
+  // Calculate metrics
+  const avgDrift = updates.length > 0 
+    ? (updates.reduce((acc, u) => acc + (u.drift || 0), 0) / updates.length).toFixed(1)
+    : 0;
+  const criticalCount = updates.filter(u => u.drift > 80).length;
+  const warningCount = updates.filter(u => u.drift > 50 && u.drift <= 80).length;
+
   const hc=h=>h==='critical'?C.accent3:h==='warning'?C.amber:C.green;
-  const chartData=[42,55,63,58,71,68,77,82,79,88,84,91];
+  const chartData=[42,55,63,58,71,68,77,82,79,88,84,avgDrift];
   return (
     <div className="page" style={{paddingTop:64}}>
       <div style={{maxWidth:1400,margin:'0 auto',padding:'22px 18px'}}>
@@ -1016,11 +1243,33 @@ function Dashboard({user,setPage}) {
             </p>
           </div>
           <div style={{display:'flex',gap:9,flexWrap:'wrap'}}>
-            <button className="btn-outline" style={{fontSize:12,padding:'7px 13px'}} onClick={()=>setPage('updates')}>📡 GenAI Updates</button>
-            <button className="btn-outline" style={{fontSize:12,padding:'7px 13px'}}>⬇ Export</button>
-            <button className="btn-primary" style={{fontSize:12,padding:'7px 13px'}}>+ Add Model</button>
+            <button className="btn-outline" style={{fontSize:12,padding:'7px 13px'}} onClick={handleGenerateReport}>📄 Intel Report</button>
+            <button className="btn-outline" style={{fontSize:12,padding:'7px 13px'}} onClick={()=>setPage('updates')}>📡 Updates</button>
+            <button className="btn-outline" style={{fontSize:12,padding:'7px 13px'}} onClick={handleExport}>⬇ Export</button>
+            <button className="btn-primary" style={{fontSize:12,padding:'7px 13px'}} onClick={()=>setShowAddModal(true)}>+ Add Model</button>
           </div>
         </div>
+        
+        {showAddModal && (
+          <div className="glass" style={{position:'fixed', inset:0, zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', background: 'rgba(0,0,0,0.8)'}}>
+            <div className="card" style={{width:'90%', maxWidth:400, animation:'fadeIn 0.3s ease'}}>
+              <h2 style={{fontSize:18, marginBottom:20}}>Add New AI Model</h2>
+              <div style={{display:'flex', flexDirection:'column', gap:12}}>
+                <input className="input-field" placeholder="Model Name (e.g. GPT-5)" value={newModel.name} onChange={e=>setNewModel({...newModel, name:e.target.value})}/>
+                <input className="input-field" placeholder="Version (e.g. 2025-01)" value={newModel.version} onChange={e=>setNewModel({...newModel, version:e.target.value})}/>
+                <input className="input-field" placeholder="Tokens (e.g. 10T)" value={newModel.tokens} onChange={e=>setNewModel({...newModel, tokens:e.target.value})}/>
+                <div>
+                   <label style={{fontSize:12, color:C.muted}}>Initial Drift Score: {newModel.drift}%</label>
+                   <input type="range" style={{width:'100%', accentColor:C.accent}} min="0" max="100" value={newModel.drift} onChange={e=>setNewModel({...newModel, drift: parseInt(e.target.value)})}/>
+                </div>
+                <div style={{display:'flex', gap:10, marginTop:10}}>
+                  <button className="btn-outline" style={{flex:1}} onClick={()=>setShowAddModal(false)}>Cancel</button>
+                  <button className="btn-primary" style={{flex:1}} onClick={handleAddModel}>Add Model</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{display:'flex',gap:2,marginBottom:22,borderBottom:`1px solid ${C.border}`,overflowX:'auto'}}>
           {tabs.map(t=>(
             <button key={t} onClick={()=>setActiveTab(t)} style={{
@@ -1035,7 +1284,7 @@ function Dashboard({user,setPage}) {
         {activeTab==='overview'&&(
           <div style={{animation:'fadeIn .4s ease'}}>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(185px,1fr))',gap:13,marginBottom:18}}>
-              {[{icon:'🔴',label:'Critical Drifts',val:'3',sub:'+2 today',c:C.accent3},{icon:'⚠️',label:'Models Warning',val:'8',sub:'15 total',c:C.amber},{icon:'📡',label:'Events/Hour',val:'24.8K',sub:'↑ 12% avg',c:C.accent},{icon:'🎯',label:'Avg Drift Score',val:'62.4',sub:'↑ 4.2 this week',c:C.accent2}].map((k,i)=>(
+              {[{icon:'🔴',label:'Critical Drifts',val:criticalCount,sub:`Out of ${updates.length} total`,c:C.accent3},{icon:'⚠️',label:'Models Warning',val:warningCount,sub:'Requires attention',c:C.amber},{icon:'📡',label:'Live Events',val:updates.length,sub:'Database records',c:C.accent},{icon:'🎯',label:'Avg Drift Score',val:avgDrift,sub:'↑ 4.2 tracking',c:C.accent2}].map((k,i)=>(
                 <div key={i} className="metric-card" style={{animation:`fadeIn .5s ${i*.1}s both`}}>
                   <div style={{fontSize:22,marginBottom:7}}>{k.icon}</div>
                   <div style={{fontFamily:'Orbitron,monospace',fontSize:24,fontWeight:700,color:k.c}}>{k.val}</div>
@@ -1096,7 +1345,9 @@ function Dashboard({user,setPage}) {
         )}
         {activeTab==='models'&&(
           <div style={{animation:'fadeIn .4s ease',display:'flex',flexDirection:'column',gap:13}}>
-            {driftModels.map((m,i)=>(
+            {driftModels.length === 0 ? (
+               Array.from({length:4}).map((_,i)=><SkeletonCard key={i}/>)
+            ) : driftModels.map((m,i)=>(
               <div key={i} className="card" style={{display:'flex',alignItems:'center',gap:16,flexWrap:'wrap',animation:`fadeIn .4s ${i*.07}s both`}}>
                 <div style={{width:40,height:40,borderRadius:9,flexShrink:0,
                   background:`linear-gradient(135deg,${C.accent2},${C.accent})`,
@@ -1159,17 +1410,20 @@ function Dashboard({user,setPage}) {
                 ))}
               </div>
               <div className="card">
-                <h3 style={{fontSize:14,fontWeight:600,marginBottom:14}}>Model Health Overview</h3>
-                {driftModels.map((m,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:9,marginBottom:11}}>
-                    <div style={{fontSize:11,color:C.muted,width:100,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name.split(' ')[0]}</div>
-                    <div className="drift-bar" style={{flex:1}}>
-                      <div className="drift-bar-fill" style={{'--w':`${m.drift}%`,width:`${m.drift}%`,
-                        background:m.drift>70?`linear-gradient(90deg,${C.accent3},#FF8A80)`:m.drift>50?`linear-gradient(90deg,${C.amber},#FFD180)`:`linear-gradient(90deg,${C.accent2},${C.accent})`}}/>
+                <h3 style={{fontSize:14,fontWeight:600,marginBottom:14}}>Drift Forecasting (7-Day Projection)</h3>
+                <div style={{display:'flex',alignItems:'flex-end',gap:12,height:120,padding:'0 10px'}}>
+                  {(analytics?.projections || [65,68,72,75,74,78,82]).map((v,i)=>(
+                    <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+                      <div style={{fontSize:10,color:v>80?C.accent3:C.muted}}>{v}%</div>
+                      <div className="skeleton" style={{width:'100%',height:`${(v/100)*80}px`,borderRadius:'4px 4px 0 0',
+                        background:v>80?`linear-gradient(to top,${C.accent3},rgba(255,77,109,.2))`:`linear-gradient(to top,${C.accent},rgba(0,212,255,.1))`}}/>
+                      <div style={{fontSize:9,color:C.muted}}>D+{i+1}</div>
                     </div>
-                    <span style={{fontSize:11,color:hc(m.health),width:28,textAlign:'right'}}>{m.drift}%</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <div style={{marginTop:15,fontSize:11,color:C.muted,textAlign:'center'}}>
+                   {analytics?.projections?.[6] > 80 ? '⚠️ High probability of network-wide drift escalation within 72h' : '✅ Stable drift trajectory predicted for current cycle'}
+                </div>
               </div>
             </div>
           </div>

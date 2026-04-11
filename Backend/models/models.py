@@ -1,0 +1,53 @@
+from flask_sqlalchemy import SQLAlchemy
+import json
+
+db = SQLAlchemy()
+
+class Update(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(100), nullable=False)
+    author = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.String(50), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    upvotes = db.Column(db.Integer, default=0)
+    tags = db.Column(db.Text)  # Stored as JSON string
+    drift_score = db.Column(db.Integer)
+    diagnosis = db.Column(db.String(255))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "category": self.category,
+            "author": self.author,
+            "date": self.date,
+            "content": self.content,
+            "upvotes": self.upvotes,
+            "tags": json.loads(self.tags) if self.tags else [],
+            "drift": self.drift_score,
+            "diagnosis": self.diagnosis
+        }
+
+class AIModel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    health = db.Column(db.String(50), default='good')
+    version = db.Column(db.String(50))
+    tokens = db.Column(db.String(50))
+    drift = db.Column(db.Integer, default=0)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "health": self.health,
+            "version": self.version,
+            "tokens": self.tokens,
+            "drift": self.drift
+        }
+
+class Vote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(100), nullable=False)
+    update_id = db.Column(db.Integer, db.ForeignKey('update.id'), nullable=False)
