@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
-from models.models import db, Update, Vote
+from models.models import db, Update, Vote, DriftCheck
 import json
 import random
+from datetime import datetime
 
 drift_bp = Blueprint('drift', __name__)
 
@@ -40,6 +41,36 @@ def calculate_drift(content):
         diagnosis = "Stable Alignment: No significant drift detected."
         
     return score, diagnosis
+
+@drift_bp.route('/api/drift/check', methods=['POST'])
+def check_drift_on_demand():
+    data = request.json
+    if not data or 'content' not in data or 'model_name' not in data:
+        return jsonify({"error": "Model name and content are required"}), 400
+        
+    user_email = data.get('user_email', 'anonymous')
+    score, diagnosis = calculate_drift(data['content'])
+    
+    new_check = DriftCheck(
+        user_email=user_email,
+        model_name=data['model_name'],
+        content=data['content'],
+        score=score,
+        diagnosis=diagnosis,
+        date=datetime.now().strftime("%Y-%m-%d %H:%M")
+    )
+    db.session.add(new_check)
+    db.session.commit()
+    
+    return jsonify(new_check.to_dict()), 201
+
+@drift_bp.route('/api/user/history', methods=['GET'])
+def get_user_history():
+    user_email = request.args.get('email')
+    if not user_email:
+        return jsonify([])
+    checks = DriftCheck.query.filter_by(user_email=user_email).order_by(DriftCheck.id.desc()).all()
+    return jsonify([c.to_dict() for c in checks])
 
 @drift_bp.route('/api/updates', methods=['GET'])
 def get_updates():

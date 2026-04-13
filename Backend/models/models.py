@@ -51,3 +51,23 @@ class Vote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_email = db.Column(db.String(100), nullable=False)
     update_id = db.Column(db.Integer, db.ForeignKey('update.id'), nullable=False)
+
+class DriftCheck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(100), nullable=False)
+    model_name = db.Column(db.String(100), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    score = db.Column(db.Integer, nullable=False)
+    diagnosis = db.Column(db.String(255), nullable=False)
+    date = db.Column(db.String(50), nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_email": self.user_email,
+            "model_name": self.model_name,
+            "content": self.content,
+            "score": self.score,
+            "diagnosis": self.diagnosis,
+            "date": self.date
+        }
