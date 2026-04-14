@@ -6,36 +6,43 @@ export const Button = ({ children, variant = 'primary', style, ...props }) => {
   const isOutline = variant === 'outline';
   
   const baseStyle = {
-    padding: '10px 20px',
+    padding: '12px 24px',
     borderRadius: '12px',
-    fontWeight: 600,
+    fontWeight: 700,
     fontSize: '14px',
     cursor: 'pointer',
-    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '8px',
     border: 'none',
     outline: 'none',
-    fontFamily: C.fontBody,
+    fontFamily: C.fontHeader,
+    letterSpacing: '0.5px',
+    position: 'relative',
+    overflow: 'hidden'
   };
 
   const variants = {
     primary: {
-      background: `linear-gradient(135deg, ${C.accent}, ${C.accent2})`,
+      background: `linear-gradient(135deg, ${C.accent}, ${C.accentHover})`,
       color: '#000',
-      boxShadow: `0 4px 15px ${C.glow}`,
+      boxShadow: `0 4px 20px ${C.glow}`,
+      textTransform: 'uppercase'
     },
     outline: {
-      background: 'transparent',
+      background: 'rgba(20, 241, 217, 0.05)',
       border: `1px solid ${C.border}`,
-      color: C.text,
+      color: C.accent,
+      backdropFilter: 'blur(10px)',
     },
     ghost: {
       background: 'transparent',
       color: C.muted,
       padding: '8px',
+      fontFamily: C.fontBody,
+      fontWeight: 500
     }
   };
 
@@ -43,12 +50,24 @@ export const Button = ({ children, variant = 'primary', style, ...props }) => {
     <button
       style={{ ...baseStyle, ...variants[variant], ...style }}
       onMouseEnter={(e) => {
-        if (isPrimary) e.currentTarget.style.transform = 'translateY(-1px)';
-        if (isOutline) e.currentTarget.style.borderColor = C.accent;
+        if (isPrimary) {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = `0 8px 25px rgba(20, 241, 217, 0.4)`;
+        }
+        if (isOutline) {
+          e.currentTarget.style.borderColor = C.accent;
+          e.currentTarget.style.background = 'rgba(20, 241, 217, 0.1)';
+        }
       }}
       onMouseLeave={(e) => {
-        if (isPrimary) e.currentTarget.style.transform = 'translateY(0)';
-        if (isOutline) e.currentTarget.style.borderColor = C.border;
+        if (isPrimary) {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = variants.primary.boxShadow;
+        }
+        if (isOutline) {
+          e.currentTarget.style.borderColor = C.border;
+          e.currentTarget.style.background = variants.outline.background;
+        }
       }}
       {...props}
     >

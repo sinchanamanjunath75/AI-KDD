@@ -1,32 +1,32 @@
 export const C = {
-  // Base Colors
-  bg: "#050A14",
-  bgCard: "#0A1628",
-  bgCard2: "#0D1F3C",
+  // Base Colors - Unified Dark Obsidian Theme
+  bg: "#03070E", 
+  bgCard: "#080F1A",
+  bgCard2: "#0C1524",
 
-  // Accents & Brand
-  accent: "#00D4FF", // Electric Blue
-  accentHover: "#00E5FF",
-  accent2: "#7B2FFF", // Deep Violet
-  accent3: "#FF4D6D", // Error / Critical
+  // Accents & Brand (More vibrant to pop against dark backgrounds)
+  accent: "#14F1D9", // Neon Mint/Cyan
+  accentHover: "#3BFFE8",
+  accent2: "#A241FF", // Deep Neon Violet
+  accent3: "#FF3366", // Critical Neon Pink/Red
 
   // UI Status
-  green: "#4CAF50",
+  green: "#14F1D9",
   amber: "#FFB347",
-  critical: "#FF4D6D",
-  stable: "#4CAF50",
+  critical: "#FF3366",
+  stable: "#14F1D9",
   warning: "#FFB347",
 
   // Text & Borders
-  text: "#E8EDF5",
-  muted: "#7A8BA0",
-  border: "#1A2E4A",
-  borderHover: "#2A4E7A",
+  text: "#F0F4F8",
+  muted: "#6B7A90",
+  border: "rgba(20, 241, 217, 0.15)", // Subtle tinted border
+  borderHover: "rgba(20, 241, 217, 0.3)",
 
-  // Special
-  glow: "rgba(0, 212, 255, 0.15)",
-  glass: "rgba(10, 22, 40, 0.7)",
-  glassBorder: "rgba(0, 212, 255, 0.2)",
+  // Special Glass Effects
+  glow: "rgba(20, 241, 217, 0.2)",
+  glass: "rgba(8, 15, 26, 0.4)", // Much more transparent for deep glass
+  glassBorder: "rgba(255, 255, 255, 0.08)",
 
   // Fonts
   fontHeader: "'Orbitron', sans-serif",

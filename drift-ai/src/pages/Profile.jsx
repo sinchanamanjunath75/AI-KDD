@@ -10,13 +10,13 @@ export const Profile = ({ user, notify }) => {
   const exportToCSV = () => {
     if (history.length === 0) return;
     
-    const headers = ['Model', 'Score', 'Diagnosis', 'Date', 'Content'];
+    const headers = ['Document', 'Score', 'Diagnosis', 'Flagged Issues', 'Date'];
     const rows = history.map(h => [
-      h.model_name,
+      h.doc_title,
       h.score,
       h.diagnosis,
-      h.date,
-      `"${h.content.replace(/"/g, '""')}"`
+      (h.flagged_sections || []).map(f => f.type).join('; '),
+      h.date
     ]);
 
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
@@ -24,11 +24,11 @@ export const Profile = ({ user, notify }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `drift_intel_report_${user.email.split('@')[0]}.csv`);
+    link.setAttribute("download", `doc_drift_report_${user.email.split('@')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    notify('Intel report exported successfully!', 'success');
+    notify('Documentation drift report exported!', 'success');
   };
 
   useEffect(() => {
@@ -43,6 +43,12 @@ export const Profile = ({ user, notify }) => {
         .catch(() => setLoading(false));
     }
   }, [user]);
+
+  const severityColor = (severity) => {
+    if (severity === 'high') return C.accent3;
+    if (severity === 'medium') return C.amber;
+    return C.muted;
+  };
 
   return (
     <div className="page" style={{ paddingTop: '100px', paddingBottom: '60px' }}>
@@ -73,7 +79,7 @@ export const Profile = ({ user, notify }) => {
           </div>
           <div style={{ marginLeft: 'auto' }}>
             <Button variant="outline" onClick={exportToCSV} disabled={history.length === 0}>
-              📥 Export Intel Report
+              📥 Export Drift Report
             </Button>
           </div>
         </div>
@@ -82,26 +88,44 @@ export const Profile = ({ user, notify }) => {
           
           {/* History Section */}
           <div style={{ gridColumn: 'span 2' }}>
-            <h2 style={{ fontFamily: C.fontHeader, fontSize: '18px', marginBottom: '20px' }}>Intelligence History</h2>
+            <h2 style={{ fontFamily: C.fontHeader, fontSize: '18px', marginBottom: '20px' }}>Scan History</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {loading ? (
-                <Card style={{ textAlign: 'center', padding: '40px', color: C.muted }}>Loading neural records...</Card>
+                <Card style={{ textAlign: 'center', padding: '40px', color: C.muted }}>Loading scan records...</Card>
               ) : history.length === 0 ? (
-                <Card style={{ textAlign: 'center', padding: '40px', color: C.muted }}>No drift traces detected yet.</Card>
+                <Card style={{ textAlign: 'center', padding: '40px', color: C.muted }}>No document scans performed yet.</Card>
               ) : history.map((check, i) => (
                 <Card key={i} style={{ padding: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
                     <div>
-                      <div style={{ fontSize: '11px', color: C.accent, fontWeight: 700, textTransform: 'uppercase' }}>{check.model_name}</div>
+                      <div style={{ fontSize: '11px', color: C.accent, fontWeight: 700, textTransform: 'uppercase' }}>{check.doc_title}</div>
                       <h3 style={{ fontSize: '16px', fontWeight: 700, color: C.text }}>{check.diagnosis}</h3>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '18px', fontWeight: 800, color: check.score > 80 ? C.accent3 : C.green }}>{check.score}%</div>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: check.score > 70 ? C.accent3 : C.green }}>{check.score}%</div>
                       <div style={{ fontSize: '10px', color: C.muted }}>DRIFT</div>
                     </div>
                   </div>
+                  {/* Flagged sections preview */}
+                  {check.flagged_sections && check.flagged_sections.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                      {check.flagged_sections.map((flag, j) => (
+                        <span key={j} style={{ 
+                          fontSize: '10px', 
+                          padding: '3px 8px', 
+                          borderRadius: '12px', 
+                          background: `${severityColor(flag.severity)}15`,
+                          border: `1px solid ${severityColor(flag.severity)}40`,
+                          color: severityColor(flag.severity),
+                          fontWeight: 600
+                        }}>
+                          {flag.type}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ fontSize: '12px', color: C.muted, borderTop: `1px solid ${C.border}`, paddingTop: '10px' }}>
-                    Analyzed on {check.date}
+                    Scanned on {check.date}
                   </div>
                 </Card>
               ))}
@@ -110,7 +134,7 @@ export const Profile = ({ user, notify }) => {
 
           {/* Settings Sidebar */}
           <div>
-            <h2 style={{ fontFamily: C.fontHeader, fontSize: '18px', marginBottom: '20px' }}>Security & Config</h2>
+            <h2 style={{ fontFamily: C.fontHeader, fontSize: '18px', marginBottom: '20px' }}>Settings</h2>
             <Card style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div>
                 <label style={{ fontSize: '12px', color: C.muted, display: 'block', marginBottom: '8px' }}>API Keys</label>
@@ -123,7 +147,7 @@ export const Profile = ({ user, notify }) => {
                 <label style={{ fontSize: '12px', color: C.muted, display: 'block', marginBottom: '8px' }}>Webhooks</label>
                 <div style={{ fontSize: '12px', color: C.muted }}>0 active listeners</div>
               </div>
-              <Button variant="outline" style={{ border: `1px solid ${C.accent3}`, color: C.accent3 }}>Delete Mission Data</Button>
+              <Button variant="outline" style={{ border: `1px solid ${C.accent3}`, color: C.accent3 }}>Delete Scan Data</Button>
             </Card>
           </div>
 

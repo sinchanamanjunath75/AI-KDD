@@ -44,13 +44,13 @@ export const Navbar = ({ page, setPage, user, onLogout }) => {
           alignItems: 'center', 
           justifyContent: 'center',
           fontSize: '16px'
-        }}>⚡</div>
+        }}>📄</div>
         DRIFT.AI
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
         {isLoggedIn ? (
-          // Logged In Navigation (Streamlined)
+          // Logged In Navigation
           <>
             <span 
               onClick={() => setPage('dashboard')} 
@@ -70,7 +70,7 @@ export const Navbar = ({ page, setPage, user, onLogout }) => {
           // Logged Out Navigation
           !isAuth && (
             <>
-              <span style={{ fontSize: '14px', color: C.muted, cursor: 'pointer' }} onClick={() => setPage('updates')}>Live Feed</span>
+              <span style={{ fontSize: '14px', color: C.muted, cursor: 'pointer' }} onClick={() => setPage('updates')}>Change Feed</span>
               <span style={{ fontSize: '14px', color: C.muted, cursor: 'pointer' }} onClick={() => setPage('contact')}>Contact</span>
               <span onClick={() => setPage('login')} style={{ fontSize: '14px', color: C.muted, cursor: 'pointer' }}>Login</span>
               <Button onClick={() => setPage('signup')} style={{ padding: '6px 16px' }}>Get Started</Button>

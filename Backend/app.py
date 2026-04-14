@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_cors import CORS
-from models.models import db, Update, AIModel
+from models.models import db, ChangeLog, KnowledgeBase
 from routes.drift import drift_bp
 from routes.auth import auth_bp
 from routes.models_routes import models_bp
@@ -16,7 +16,7 @@ CORS(app, resources={r"/api/*": {"origins": ["http://localhost:5173", "http://12
 
 @app.route('/')
 def health_check():
-    return {"status": "success", "message": "DRIFT.AI Backend API is running"}
+    return {"status": "success", "message": "DRIFT.AI Documentation Intelligence API is running"}
 
 # ===== DATABASE CONFIG =====
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -45,4 +45,4 @@ app.register_blueprint(models_bp)
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)

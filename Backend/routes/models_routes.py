@@ -1,26 +1,29 @@
 from flask import Blueprint, request, jsonify
-from models.models import db, AIModel
+from models.models import db, KnowledgeBase
+from datetime import datetime
 
 models_bp = Blueprint('models', __name__)
 
-@models_bp.route('/api/models', methods=['GET'])
-def get_models():
-    models = AIModel.query.all()
-    return jsonify([m.to_dict() for m in models])
+@models_bp.route('/api/knowledge-bases', methods=['GET'])
+def get_knowledge_bases():
+    """Get all registered knowledge bases."""
+    kbs = KnowledgeBase.query.all()
+    return jsonify([kb.to_dict() for kb in kbs])
 
-@models_bp.route('/api/models', methods=['POST'])
-def add_model():
+@models_bp.route('/api/knowledge-bases', methods=['POST'])
+def add_knowledge_base():
+    """Register a new knowledge base."""
     data = request.json
     if not data or 'name' not in data:
-        return jsonify({"error": "Model name is required"}), 400
+        return jsonify({"error": "Knowledge base name is required"}), 400
         
-    new_model = AIModel(
+    new_kb = KnowledgeBase(
         name=data['name'],
-        health=data.get('health', 'good'),
-        version=data.get('version', '1.0'),
-        tokens=data.get('tokens', 'Unknown'),
-        drift=data.get('drift', 0)
+        status=data.get('status', 'current'),
+        doc_count=data.get('doc_count', 0),
+        last_checked=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        avg_drift=data.get('avg_drift', 0)
     )
-    db.session.add(new_model)
+    db.session.add(new_kb)
     db.session.commit()
-    return jsonify(new_model.to_dict()), 201
+    return jsonify(new_kb.to_dict()), 201
