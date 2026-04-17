@@ -2,45 +2,139 @@ from flask import Blueprint, request, jsonify
 from models.models import db, Update, Vote, DriftCheck
 import json
 import random
+import re
 from datetime import datetime
 
 drift_bp = Blueprint('drift', __name__)
 
+CHANGE_TERMS = {"deprecated", "removed", "renamed", "migrated", "changed", "updated", "replaced"}
+TERM_REPLACEMENTS = {
+    "gpt-3.5": "gpt-4o",
+    "legacy auth": "oauth2",
+    "manual deployment": "ci/cd pipeline",
+    "python 3.10": "python 3.12",
+    "old endpoint": "v2 endpoint"
+}
+
 def calculate_drift(content):
-    # Core Logic: Simulate AI detection drift score (10-95%)
-    score = random.randint(20, 80)
-    
-    # Simple keyword-based simulation
-    keywords = {
-        'hallucination': 15,
-        'drift': 10,
-        'outdated': 12,
-        'gpt-4': 5,
-        'gemini': 5,
-        'cutoff': 10,
-        'latency': -5
-    }
-    
+    """
+    Simulates advanced AI analysis of knowledge drift using semantic markers 
+    and heuristic evaluation of content stale-ness.
+    """
     content_lower = content.lower()
-    for kw, bonus in keywords.items():
-        if kw in content_lower:
-            score += bonus
-            
-    score = max(10, min(95, score))
+    score = random.randint(15, 45) # Base noise
     
-    # Generate AI Diagnosis based on keywords/score
-    if 'hallucination' in content_lower:
-        diagnosis = "Hallucination Spike: Model generating unverified facts."
-    elif 'outdated' in content_lower or 'cutoff' in content_lower:
-        diagnosis = "Temporal Inconsistency: Model relying on pre-cutoff knowledge."
-    elif score > 80:
-        diagnosis = "Critical Semantic Decay: Core concepts are misaligned."
-    elif score > 50:
-        diagnosis = "Moderate Concept Drift: Subtle deviances in long context."
+    # Semantic Drift Indicators
+    indicators = [
+        (r"gpt-3\.5|legacy|deprecated|old version", 25, "Found references to deprecated infrastructure."),
+        (r"manual deployment|handover|ftp|zip upload", 15, "Content suggests outdated deployment practices."),
+        (r"cutoff|pre-2022|old data", 20, "Temporal inconsistency: Model relies on pre-cutoff knowledge."),
+        (r"hallucination|incorrect|false|unverified", 30, "Low-level semantic decay: Model is generating unverified facts."),
+        (r"python 3\.[0-9]\s|java 8|node 12", 15, "Runtime version mismatch: Content references EOL software."),
+        (r"slow|latency|bottleneck", 5, "Performance degradation reported."),
+        (r"drift|alignment|decay", 10, "Explicit drift markers detected in trace.")
+    ]
+    
+    findings = []
+    for pattern, weight, diagnosis in indicators:
+        if re.search(pattern, content_lower):
+            score += weight
+            findings.append(diagnosis)
+            
+    score = max(5, min(98, score))
+    
+    # Generate Sophisticated Diagnosis
+    if score > 85:
+        primary = "CRITICAL NEURAL DRIFT: Core concepts have undergone significant semantic shift."
+    elif score > 60:
+        primary = "MODERATE CONCEPT DECAY: Knowledge base is beginning to diverge from source truth."
+    elif score > 35:
+        primary = "MINOR ALIGNMENT VARIANCE: Subtle inaccuracies detected in long-context retrieval."
     else:
-        diagnosis = "Stable Alignment: No significant drift detected."
+        primary = "OPTIMAL SYNC: Model response remains tightly aligned with latest documentation."
         
-    return score, diagnosis
+    final_diagnosis = f"{primary} {' | '.join(findings[:2])}" if findings else primary
+    return score, final_diagnosis
+
+def _normalize_text(text):
+    return (text or "").lower()
+
+def _extract_tokens(text):
+    return set(re.findall(r"[a-zA-Z0-9\-]{4,}", _normalize_text(text)))
+
+def _build_signal_text(signal):
+    return f"{signal.get('title', '')} {signal.get('content', '')}"
+
+def _analyze_document_consistency(doc, signals):
+    doc_text = _normalize_text(doc.get("content", ""))
+    doc_tokens = _extract_tokens(doc_text)
+    doc_section = doc.get("section", "General")
+    matched_signals = []
+    evidence = []
+    gaps = []
+    risk = 0
+
+    for signal in signals:
+        signal_text = _normalize_text(_build_signal_text(signal))
+        signal_tokens = _extract_tokens(signal_text)
+        overlap = doc_tokens.intersection(signal_tokens)
+
+        # Relevant if it overlaps, or if the signal clearly indicates a change event.
+        signal_has_change_term = any(term in signal_text for term in CHANGE_TERMS)
+        if len(overlap) >= 2 or signal_has_change_term:
+            matched_signals.append(signal)
+
+            if signal_has_change_term and len(overlap) >= 1:
+                risk += 16
+                evidence.append(
+                    f"Change signal \"{signal.get('title', 'Untitled update')}\" overlaps with section \"{doc_section}\"."
+                )
+
+            for deprecated_term, replacement_term in TERM_REPLACEMENTS.items():
+                if deprecated_term in doc_text and replacement_term in signal_text:
+                    risk += 28
+                    gaps.append(
+                        f"Document still references \"{deprecated_term}\" while updates mention \"{replacement_term}\"."
+                    )
+
+    if not matched_signals:
+        return None
+
+    # Additional heuristics for stale content.
+    if "todo" in doc_text or "tbd" in doc_text:
+        risk += 10
+        gaps.append("Section contains placeholders (TODO/TBD), which can indicate incomplete documentation.")
+
+    risk = max(0, min(100, risk))
+    is_flagged = risk >= 35 or len(gaps) > 0
+
+    if not is_flagged:
+        return None
+
+    top_signal_titles = [s.get("title", "Untitled update") for s in matched_signals[:2]]
+    recommendation = (
+        f"Review section \"{doc_section}\" against recent changes ({', '.join(top_signal_titles)}). "
+        "Update terminology, version references, and process steps to match current behavior."
+    )
+
+    return {
+        "document_id": doc.get("id"),
+        "document_title": doc.get("title", "Untitled document"),
+        "section": doc_section,
+        "risk_score": risk,
+        "evidence": evidence[:3],
+        "gaps": gaps[:3],
+        "matched_signals": [
+            {
+                "id": s.get("id"),
+                "type": s.get("type", "update"),
+                "title": s.get("title", "Untitled update"),
+                "date": s.get("date")
+            }
+            for s in matched_signals[:5]
+        ],
+        "suggested_update": recommendation
+    }
 
 @drift_bp.route('/api/drift/check', methods=['POST'])
 def check_drift_on_demand():
@@ -159,4 +253,43 @@ def get_analytics_summary():
         "total_updates": len(updates),
         "projections": projections,
         "health_score": round(100 - avg_drift, 1)
+    })
+
+@drift_bp.route('/api/docs/consistency-check', methods=['POST'])
+def docs_consistency_check():
+    data = request.json or {}
+    documents = data.get("documents", [])
+    signals = data.get("signals", [])
+
+    if not isinstance(documents, list) or not isinstance(signals, list):
+        return jsonify({"error": "documents and signals must both be arrays"}), 400
+
+    if len(documents) == 0:
+        return jsonify({
+            "summary": {
+                "total_documents": 0,
+                "signals_compared": len(signals),
+                "flagged_documents": 0,
+                "average_risk": 0
+            },
+            "flagged": []
+        })
+
+    flagged = []
+    for doc in documents:
+        if not isinstance(doc, dict):
+            continue
+        result = _analyze_document_consistency(doc, signals)
+        if result:
+            flagged.append(result)
+
+    average_risk = round(sum(item["risk_score"] for item in flagged) / len(flagged), 1) if flagged else 0
+    return jsonify({
+        "summary": {
+            "total_documents": len(documents),
+            "signals_compared": len(signals),
+            "flagged_documents": len(flagged),
+            "average_risk": average_risk
+        },
+        "flagged": sorted(flagged, key=lambda x: x["risk_score"], reverse=True)
     })

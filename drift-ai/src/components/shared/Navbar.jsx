@@ -58,6 +58,12 @@ export const Navbar = ({ page, setPage, user, onLogout }) => {
             >
               Dashboard
             </span>
+            <span
+              onClick={() => setPage('updates')}
+              style={{ fontSize: '14px', color: page === 'updates' ? C.accent : C.muted, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Docs Integrity
+            </span>
             <span 
               onClick={() => setPage('profile')} 
               style={{ fontSize: '14px', color: page === 'profile' ? C.accent : C.muted, fontWeight: 600, cursor: 'pointer' }}
