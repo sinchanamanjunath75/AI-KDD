@@ -127,7 +127,7 @@ export default function App() {
         fontSize: '13px'
       }}>
         <div style={{ fontFamily: C.fontHeader, color: C.text, fontSize: '16px', marginBottom: '16px' }}>DRIFT.AI</div>
-        <p>© 2026 Semantic Drift Detection Network. All rights reserved.</p>
+        <p>© 2026 DRIFT.AI — Documentation Intelligence Platform. All rights reserved.</p>
         <div style={{ marginTop: '16px', display: 'flex', gap: '20px', justifyContent: 'center' }}>
           <span>Privacy</span>
           <span>Terms</span>

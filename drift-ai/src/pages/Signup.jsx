@@ -48,7 +48,7 @@ export const Signup = ({ setPage, onLogin }) => {
       <Card style={{ width: '100%', maxWidth: '500px', padding: '40px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <h1 style={{ fontFamily: C.fontHeader, fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>Create Account</h1>
-          <p style={{ color: C.muted, fontSize: '14px' }}>Join the DRIFT.AI intelligence network</p>
+          <p style={{ color: C.muted, fontSize: '14px' }}>Join the DRIFT.AI documentation platform</p>
         </div>
 
         {error && (
@@ -130,7 +130,7 @@ export const Signup = ({ setPage, onLogin }) => {
           </div>
           
           <Button type="submit" disabled={loading} style={{ width: '100%', marginTop: '16px' }}>
-            {loading ? 'Creating Account...' : '⚡ Launch Dashboard'}
+            {loading ? 'Creating Account...' : '🚀 Start Scanning'}
           </Button>
         </form>
 

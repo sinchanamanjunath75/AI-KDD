@@ -7,13 +7,13 @@ export const DriftHistoryChart = ({ data }) => {
   const chartData = [...data].reverse().map(item => ({
     name: item.date.split(' ')[0], // Date only
     score: item.score,
-    model: item.model_name
+    doc: item.doc_title
   }));
 
   if (chartData.length < 2) {
     return (
       <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: '14px', border: `1px dashed ${C.border}`, borderRadius: '12px' }}>
-        Awaiting more neural data points for trend analysis...
+        Awaiting more document scans for trend analysis...
       </div>
     );
   }

@@ -56,9 +56,9 @@ export const Login = ({ setPage, onLogin }) => {
             alignItems: 'center', 
             justifyContent: 'center', 
             fontSize: '28px' 
-          }}>⚡</div>
+          }}>📄</div>
           <h1 style={{ fontFamily: C.fontHeader, fontSize: '24px', fontWeight: 700, marginBottom: '8px' }}>Welcome Back</h1>
-          <p style={{ color: C.muted, fontSize: '14px' }}>Sign in to Mission Control</p>
+          <p style={{ color: C.muted, fontSize: '14px' }}>Sign in to Doc Scanner</p>
         </div>
 
         {error && (
@@ -100,7 +100,7 @@ export const Login = ({ setPage, onLogin }) => {
           </div>
           
           <Button type="submit" disabled={loading} style={{ width: '100%', marginTop: '8px' }}>
-            {loading ? 'Authenticating...' : 'Sign In →'}
+            {loading ? 'Signing in...' : 'Sign In →'}
           </Button>
         </form>
 

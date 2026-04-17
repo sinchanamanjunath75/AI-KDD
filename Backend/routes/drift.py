@@ -1,12 +1,19 @@
 from flask import Blueprint, request, jsonify
-from models.models import db, Update, Vote, DriftCheck
+from models.models import db, ChangeLog, Vote, DocDriftCheck
 import json
+<<<<<<< HEAD
 import random
 import re
+=======
+import re
+import os
+>>>>>>> 93b2a3ad1d7cfa9a1a76a252987dac2a41eb744f
 from datetime import datetime
+import google.generativeai as genai
 
 drift_bp = Blueprint('drift', __name__)
 
+<<<<<<< HEAD
 CHANGE_TERMS = {"deprecated", "removed", "renamed", "migrated", "changed", "updated", "replaced"}
 TERM_REPLACEMENTS = {
     "gpt-3.5": "gpt-4o",
@@ -135,22 +142,97 @@ def _analyze_document_consistency(doc, signals):
         ],
         "suggested_update": recommendation
     }
+=======
+def calculate_doc_drift(doc_content, update_content):
+    """
+    Compare existing documentation against a new update/changelog/ticket using Gemini AI.
+    Identifies outdated sections and calculates a drift score.
+    """
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        return _fallback_calculate_doc_drift(doc_content, update_content, "Error: GEMINI_API_KEY not configured in backend.")
+
+    try:
+        genai.configure(api_key=gemini_api_key)
+        # Using gemini-1.5-flash as it's fast and effective for JSON tasks
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        prompt = f"""
+You are an expert Documentation Intelligence Engine. Your task is to analyze an existing document against a new changelog or ticket and identify "Documentation Drift" (i.e., parts of the documentation that are now outdated, deprecated, or incorrect due to the new update).
+
+Compare the following two texts:
+--- EXISTING DOCUMENTATION ---
+{doc_content}
+--- NEW CHANGELOG / TICKET ---
+{update_content}
+
+Analyze the changes and output a JSON response with EXACTLY the following structure. Do not output markdown, only the JSON.
+
+{{
+  "score": (integer 0-100), // 0 means perfectly up-to-date, 100 means completely obsolete.
+  "diagnosis": (string), // A 1-2 sentence high-level summary of the drift status (e.g., "Critical Drift: API endpoints migrated and old versions deprecated.")
+  "flagged_sections": [ // List of specific issues found. Empty array if no issues.
+    {{
+      "type": (string), // e.g., "Version Mismatch", "Deprecated API", "Missing Configuration"
+      "severity": (string), // "high", "medium", or "low"
+      "detail": (string) // E.g., "The changelog mentions OAuth 2.0 but the docs still use Basic Auth."
+    }}
+  ]
+}}
+"""
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+            )
+        )
+        
+        # Parse the JSON response
+        result = json.loads(response.text)
+        
+        # Ensure score is within bounds
+        score = max(0, min(100, int(result.get("score", 0))))
+        diagnosis = result.get("diagnosis", "Unknown drift status.")
+        flagged = result.get("flagged_sections", [])
+        
+        return score, diagnosis, flagged
+
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return _fallback_calculate_doc_drift(doc_content, update_content, f"Gemini API failed: {str(e)[:100]}")
+
+def _fallback_calculate_doc_drift(doc_content, update_content, error_msg):
+    """Basic fallback algorithm if AI fails or key is missing."""
+    score = 50
+    diagnosis = f"Fallback Analysis: {error_msg}"
+    flagged = [{
+        "type": "AI Engine Unavailable",
+        "severity": "medium",
+        "detail": "Could not connect to Gemini API. Using basic algorithmic fallback."
+    }]
+    return score, diagnosis, flagged
+>>>>>>> 93b2a3ad1d7cfa9a1a76a252987dac2a41eb744f
 
 @drift_bp.route('/api/drift/check', methods=['POST'])
-def check_drift_on_demand():
+def check_drift():
+    """Compare existing documentation against a new update/changelog."""
     data = request.json
-    if not data or 'content' not in data or 'model_name' not in data:
-        return jsonify({"error": "Model name and content are required"}), 400
-        
-    user_email = data.get('user_email', 'anonymous')
-    score, diagnosis = calculate_drift(data['content'])
+    if not data or 'doc_content' not in data or 'update_content' not in data:
+        return jsonify({"error": "Both doc_content and update_content are required"}), 400
     
-    new_check = DriftCheck(
+    user_email = data.get('user_email', 'anonymous')
+    doc_title = data.get('doc_title', 'Untitled Document')
+    
+    score, diagnosis, flagged = calculate_doc_drift(data['doc_content'], data['update_content'])
+    
+    new_check = DocDriftCheck(
         user_email=user_email,
-        model_name=data['model_name'],
-        content=data['content'],
+        doc_title=doc_title,
+        doc_content=data['doc_content'],
+        update_content=data['update_content'],
         score=score,
         diagnosis=diagnosis,
+        flagged_sections=json.dumps(flagged),
         date=datetime.now().strftime("%Y-%m-%d %H:%M")
     )
     db.session.add(new_check)
@@ -158,28 +240,36 @@ def check_drift_on_demand():
     
     return jsonify(new_check.to_dict()), 201
 
+
 @drift_bp.route('/api/user/history', methods=['GET'])
 def get_user_history():
+    """Get a user's past documentation drift checks."""
     user_email = request.args.get('email')
     if not user_email:
         return jsonify([])
-    checks = DriftCheck.query.filter_by(user_email=user_email).order_by(DriftCheck.id.desc()).all()
+    checks = DocDriftCheck.query.filter_by(user_email=user_email).order_by(DocDriftCheck.id.desc()).all()
     return jsonify([c.to_dict() for c in checks])
+
 
 @drift_bp.route('/api/updates', methods=['GET'])
 def get_updates():
-    updates = Update.query.all()
+    """Get all changelogs/tickets/updates."""
+    updates = ChangeLog.query.all()
     return jsonify([u.to_dict() for u in updates])
+
 
 @drift_bp.route('/api/updates', methods=['POST'])
 def create_update():
+    """Create a new changelog/ticket entry."""
     data = request.json
     if not data:
         return jsonify({"error": "No data provided"}), 400
-        
-    drift, diagnosis = calculate_drift(data.get('content', ''))
     
-    new_update = Update(
+    # Calculate impact score based on changelog content
+    dummy_doc = "This is a placeholder document."
+    drift_score, diagnosis, _ = calculate_doc_drift(dummy_doc, data.get('content', ''))
+    
+    new_update = ChangeLog(
         title=data.get('title'),
         category=data.get('category'),
         author=data.get('author'),
@@ -187,26 +277,26 @@ def create_update():
         content=data.get('content'),
         upvotes=data.get('upvotes', 0),
         tags=json.dumps(data.get('tags', [])),
-        drift_score=drift,
+        drift_score=drift_score,
         diagnosis=diagnosis
     )
     db.session.add(new_update)
     db.session.commit()
     return jsonify(new_update.to_dict()), 201
 
+
 @drift_bp.route('/api/updates/<int:update_id>/vote', methods=['PUT'])
 def vote_update(update_id):
-    update = Update.query.get_or_404(update_id)
+    """Vote on a changelog entry."""
+    update = ChangeLog.query.get_or_404(update_id)
     data = request.json
     user_email = data.get('user_email')
     
-    # Update vote count item
     if data and 'upvotes' in data:
         update.upvotes = data['upvotes']
     else:
         update.upvotes += 1
         
-    # Record persistent vote if user is logged in
     if user_email:
         existing_vote = Vote.query.filter_by(user_email=user_email, update_id=update_id).first()
         if existing_vote:
@@ -219,6 +309,7 @@ def vote_update(update_id):
     db.session.commit()
     return jsonify(update.to_dict())
 
+
 @drift_bp.route('/api/user/votes', methods=['GET'])
 def get_user_votes():
     user_email = request.args.get('email')
@@ -227,32 +318,27 @@ def get_user_votes():
     votes = Vote.query.filter_by(user_email=user_email).all()
     return jsonify([v.update_id for v in votes])
 
+
 @drift_bp.route('/api/analytics/summary', methods=['GET'])
 def get_analytics_summary():
-    updates = Update.query.all()
-    models = [u.title.split(' ')[0] for u in updates]
+    """Get aggregate documentation health statistics."""
+    checks = DocDriftCheck.query.all()
+    changelogs = ChangeLog.query.all()
     
-    # Calculate avg drift
-    total_drift = sum([u.drift_score for u in updates]) if updates else 0
-    avg_drift = total_drift / len(updates) if updates else 0
+    total_drift = sum([c.score for c in checks]) if checks else 0
+    avg_drift = total_drift / len(checks) if checks else 0
     
-    # Simple Projection logic: 
-    # If the last 3 updates have increasing drift, projection is higher.
-    recent_updates = Update.query.order_by(Update.id.desc()).limit(3).all()
-    recent_avg = sum([r.drift_score for r in recent_updates]) / len(recent_updates) if recent_updates else avg_drift
-    slope = (recent_avg - avg_drift) * 0.5
+    # Projection based on recent checks
+    recent_checks = DocDriftCheck.query.order_by(DocDriftCheck.id.desc()).limit(5).all()
+    recent_avg = sum([r.score for r in recent_checks]) / len(recent_checks) if recent_checks else avg_drift
     
-    projections = []
-    for i in range(1, 8):
-        projected_val = min(99, max(10, recent_avg + (slope * i) + random.randint(-2, 2)))
-        projections.append(round(projected_val, 1))
-        
     return jsonify({
         "avg_drift": round(avg_drift, 1),
-        "critical_count": len([u for u in updates if u.drift_score > 80]),
-        "total_updates": len(updates),
-        "projections": projections,
-        "health_score": round(100 - avg_drift, 1)
+        "critical_count": len([c for c in checks if c.score > 70]),
+        "total_checks": len(checks),
+        "total_changelogs": len(changelogs),
+        "health_score": round(100 - avg_drift, 1),
+        "recent_avg": round(recent_avg, 1)
     })
 
 @drift_bp.route('/api/docs/consistency-check', methods=['POST'])
